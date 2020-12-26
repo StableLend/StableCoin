@@ -1,1 +1,1 @@
-# StableCoin-CDP-
+# StableCoin (Collaterlized Debt Position )
