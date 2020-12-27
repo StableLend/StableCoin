@@ -38,27 +38,18 @@ class USDOracle(sp.Contract):
         
         sp.transfer(data,sp.mutez(0),contract)
 
-    # @sp.entry_point
-    # def SecuritiesPurchase(self,params):
 
-    #     sp.set_type(params, sp.TRecord(price = sp.TNat, id = sp.TNat))
+    @sp.entry_point 
+    def LiquidateToken(self,params):
 
-    #     c = sp.contract(sp.TRecord(price = sp.TNat, id = sp.TNat, current = sp.TNat), sp.sender, entry_point = "OraclePurchaseSecurity").open_some()
+        sp.set_type(params, sp.TRecord(address = sp.TAddress))
 
-    #     mydata = sp.record(price = self.data.PriceMap[params.price],id = params.id , current = self.data.PriceMap[100])
+        data = sp.record(price=self.data.USDPrice,address = params.address)
+        
+        contract = sp.contract(sp.TRecord( price = sp.TNat, address = sp.TAddress),sp.sender,entry_point = "OracleLiquidate").open_some()
+        
+        sp.transfer(data,sp.mutez(0),contract)
 
-    #     sp.transfer(mydata, sp.mutez(0), c)
-
-    # @sp.entry_point
-    # def SecuritiesExercise(self,params):
-
-    #     sp.set_type(params, sp.TRecord(price = sp.TNat, id = sp.TNat))
-            
-    #     c = sp.contract(sp.TRecord(price = sp.TNat, id = sp.TNat), sp.sender, entry_point = "OracleExerciseSecurity").open_some()
-
-    #     mydata = sp.record(price = self.data.PriceMap[params.price],id = params.id)
-
-    #     sp.transfer(mydata, sp.mutez(0), c)
 
 
 class Vault(sp.Contract):
@@ -108,8 +99,6 @@ class Vault(sp.Contract):
         mydata = sp.record(loan = params.loan)
 
         sp.transfer(mydata, sp.mutez(0), c)
-
-    
     
     @sp.entry_point 
     def OracleMint(self,params):
@@ -118,12 +107,12 @@ class Vault(sp.Contract):
         sp.set_type(params, sp.TRecord(price = sp.TNat,loan = sp.TNat))
 
 
-        sp.verify(self.data.xtz * params.price >= self.data.token*150)
+        sp.verify(self.data.xtz * params.price*1000 >= self.data.token*150)
 
-        # Call Validation
+        # Call Validation for minting token
 
     @sp.entry_point
-    def PayBackLoad(self,params):
+    def PayBackLoan(self,params):
 
         sp.set_type(params, sp.TRecord(loan = sp.TNat))
         sp.verify(sp.sender == self.data.owner)
@@ -144,7 +133,30 @@ class Vault(sp.Contract):
         self.data.token = abs(self.data.token - params.loan)
 
         # Call Burn Validation 
-    
+
+
+    @sp.entry_point 
+    def LiquidateVault(self,params):
+
+        sp.verify(sp.amount == sp.mutez(100))
+        
+        c = sp.contract(sp.TRecord(address = sp.TAddress), self.data.oracle, entry_point = "LiquidateToken").open_some()
+
+        mydata = sp.record(address = sp.sender)
+
+        sp.transfer(mydata, sp.mutez(0), c)
+
+
+    @sp.entry_point
+    def OracleLiquidate(self,params):
+
+        sp.set_type(params, sp.TRecord(address = sp.TAddress,price = sp.TNat))        
+
+        sp.verify(sp.sender == self.data.oracle)
+
+        
+
+
 @sp.add_test(name="Validator")
 def test():
 
@@ -172,3 +184,7 @@ def test():
 
     scenario += c1.feedData(price=200).run(sender=admin)
     scenario += c2.OpenLoan(amount=6,loan=4).run(sender=admin,amount=sp.tez(6))
+    scenario += c2.IncreaseCollateral(amount = 6).run(sender=admin,amount=sp.tez(6))
+    scenario += c2.IncreaseLoan(loan=2).run(sender=admin)
+    scenario += c2.IncreaseLoan(loan=2).run(sender=admin)
+    scenario += c2.IncreaseLoan(loan=2).run(sender=admin)
