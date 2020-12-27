@@ -3,6 +3,62 @@
 
 import smartpy as sp
 
+class Validator(sp.Contract):
+
+    def __init__(self,token,oracle,admin):
+
+        self.init(
+        Indexer = sp.big_map(),
+        token = token,
+        oracle = oracle, 
+        admin = admin,
+        vaultopener = admin
+        )
+
+    @sp.entry_point
+    def AddVault(self,params):
+        
+        sp.set_type(params,sp.TRecord( address = sp.TAddress, contract = sp.TAddress))
+        sp.verify(sp.sender == self.data.vaultopener)
+
+        sp.if ~self.data.Indexer.contains(params.address):
+            self.data.Indexer[params.address] = sp.set()
+
+        self.data.Indexer[params.address].add(params.contract)
+
+    @sp.entry_point
+    def UpdateVaultOpener(self,params):
+
+        sp.set_type(params,sp.TRecord( address = sp.TAddress))
+        sp.verify(sp.sender == self.data.admin)
+        self.data.vaultopener = params.address
+
+    @sp.entry_point
+    def MintToken(self,params):
+
+        sp.set_type(params,sp.TRecord(amount = sp.TNat , address = sp.TAddress))
+        sp.verify(self.data.Indexer[params.address].contains(sp.sender))
+        
+        c = sp.contract(sp.TRecord(address = sp.TAddress, value = sp.TNat), self.data.token, entry_point = "Hello").open_some()
+
+        mydata = sp.record(address = params.address, value = params.amount)
+
+        sp.transfer(mydata, sp.mutez(10), c)
+
+    @sp.entry_point
+    def BurnToken(self,params):
+        
+        sp.set_type(params,sp.TRecord(amount = sp.TNat , address = sp.TAddress))
+        sp.verify(self.data.Indexer[params.address].contains(sp.sender))
+        
+        c = sp.contract(sp.TRecord(address = sp.TAddress, value = sp.TNat), self.data.token, entry_point = "Hello").open_some()
+
+        mydata = sp.record(address = params.address, value = params.amount)
+
+        sp.transfer(mydata, sp.mutez(10), c)
+
+
+
 class FA12_core(sp.Contract):
     def __init__(self, **extra_storage):
         self.init(balances = sp.big_map(tvalue = sp.TRecord(approvals = sp.TMap(sp.TAddress, sp.TNat), balance = sp.TNat)), totalSupply = 0, **extra_storage)
@@ -140,67 +196,15 @@ if "templates" not in __name__:
         scenario.h1("Accounts")
         scenario.show([admin, alice, bob])
 
-        scenario.h1("Contract")
-        c1 = FA12(admin.address)
+        token = FA12(sp.address("tz1eWLeTiKdmedBpf2K4QyKpya9pm2mGHAPY"))
+        scenario += token
+        c1 = Validator(
+        token.address,
+        sp.address("KT1VeheLFhQWThArNBt7kTVSFVBthPxvh5Fc"),
+        sp.address("tz1eWLeTiKdmedBpf2K4QyKpya9pm2mGHAPY")
+        )
+        scenario += c1  
 
-        scenario.h1("Entry points")
-        scenario += c1
 
-        scenario.h2("Admin mints a few coins")
-        scenario += c1.mint(address = alice.address, value = 12).run(sender = admin)
-        scenario += c1.mint(address = alice.address, value = 3).run(sender = admin)
-        # scenario += c1.mint(address = alice.address, value = 3).run(sender = admin)
-        # scenario.h2("Alice transfers to Bob")
-        # scenario += c1.transfer(from_ = alice.address, to_ = bob.address, value = 4).run(sender = alice)
-        # scenario.verify(c1.data.balances[alice.address].balance == 14)
-        # scenario.h2("Bob tries to transfer from Alice but he doesn't have her approval")
-        # scenario += c1.transfer(from_ = alice.address, to_ = bob.address, value = 4).run(sender = bob, valid = False)
-        # scenario.h2("Alice approves Bob and Bob transfers")
-        # scenario += c1.approve(spender = bob.address, value = 5).run(sender = alice)
-        # scenario += c1.transfer(from_ = alice.address, to_ = bob.address, value = 4).run(sender = bob)
-        # scenario.h2("Bob tries to over-transfer from Alice")
-        # scenario += c1.transfer(from_ = alice.address, to_ = bob.address, value = 4).run(sender = bob, valid = False)
-        # scenario.h2("Admin burns Bob token")
-        # scenario += c1.burn(address = bob.address, value = 1).run(sender = admin)
-        # scenario.verify(c1.data.balances[alice.address].balance == 10)
-        # scenario.h2("Alice tries to burn Bob token")
-        # scenario += c1.burn(address = bob.address, value = 1).run(sender = alice, valid = False)
-        # scenario.h2("Admin pauses the contract and Alice cannot transfer anymore")
-        # scenario += c1.setPause(True).run(sender = admin)
-        # scenario += c1.transfer(from_ = alice.address, to_ = bob.address, value = 4).run(sender = alice, valid = False)
-        # scenario.verify(c1.data.balances[alice.address].balance == 10)
-        # scenario.h2("Admin transfers while on pause")
-        # scenario += c1.transfer(from_ = alice.address, to_ = bob.address, value = 1).run(sender = admin)
-        # scenario.h2("Admin unpauses the contract and transferts are allowed")
-        # scenario += c1.setPause(False).run(sender = admin)
-        # scenario.verify(c1.data.balances[alice.address].balance == 9)
-        # scenario += c1.transfer(from_ = alice.address, to_ = bob.address, value = 1).run(sender = alice)
-
-        # scenario.verify(c1.data.totalSupply == 17)
-        # scenario.verify(c1.data.balances[alice.address].balance == 8)
-        # scenario.verify(c1.data.balances[bob.address].balance == 9)
-
-        # scenario.h1("Views")
-        # scenario.h2("Balance")
-        # view_balance = Viewer(sp.TNat)
-        # scenario += view_balance
-        # scenario += c1.getBalance((alice.address, view_balance.typed))
-        # scenario.verify_equal(view_balance.data.last, sp.some(8))
-
-        # scenario.h2("Administrator")
-        # view_administrator = Viewer(sp.TAddress)
-        # scenario += view_administrator
-        # scenario += c1.getAdministrator((sp.unit, view_administrator.typed))
-        # scenario.verify_equal(view_administrator.data.last, sp.some(admin.address))
-
-        # scenario.h2("Total Supply")
-        # view_totalSupply = Viewer(sp.TNat)
-        # scenario += view_totalSupply
-        # scenario += c1.getTotalSupply((sp.unit, view_totalSupply.typed))
-        # scenario.verify_equal(view_totalSupply.data.last, sp.some(17))
-
-        # scenario.h2("Allowance")
-        # view_allowance = Viewer(sp.TNat)
-        # scenario += view_allowance
-        # scenario += c1.getAllowance((sp.record(owner = alice.address, spender = bob.address), view_allowance.typed))
-        # scenario.verify_equal(view_allowance.data.last, sp.some(1))
+        scenario += token.AddValidator(address = c1.address).run(sender=sp.address("tz1eWLeTiKdmedBpf2K4QyKpya9pm2mGHAPY"))
+        scenario += c1.

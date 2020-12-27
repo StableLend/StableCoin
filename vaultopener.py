@@ -187,62 +187,11 @@ class VaultOpener(sp.Contract):
         sp.send(self.data.admin,sp.balance)
     
 
-class Validator(sp.Contract):
-
-    def __init__(self,token,oracle,admin):
-
-        self.init(
-        Indexer = sp.big_map(),
-        token = token,
-        oracle = oracle, 
-        admin = admin,
-        vaultopener = admin
-        )
-
     @sp.entry_point
-    def AddVault(self,params):
-        
-        sp.set_type(params,sp.TRecord( address = sp.TAddress, contract = sp.TAddress))
-        sp.verify(sp.sender == self.data.vaultopener)
-
-        sp.if ~self.data.Indexer.contains(params.address):
-            self.data.Indexer[params.address] = sp.set()
-
-        self.data.Indexer[params.address].add(params.contract)
-
-    @sp.entry_point
-    def UpdateVaultOpener(self,params):
-
-        sp.set_type(params,sp.TRecord( address = sp.TAddress))
+    def ChangeValidator(self,params):
         sp.verify(sp.sender == self.data.admin)
-        self.data.vaultopener = params.address
+        self.data.validator = params.address
 
-    @sp.entry_point
-    def MintToken(self,params):
-
-        sp.set_type(params,sp.TRecord(amount = sp.TNat , address = sp.TAddress))
-        sp.verify(self.data.Indexer[params.address].contains(sp.sender))
-        
-        c = sp.contract(sp.TRecord(address = sp.TAddress, value = sp.TNat), self.data.token, entry_point = "Hello").open_some()
-
-        mydata = sp.record(address = params.address, value = params.amount)
-
-        sp.transfer(mydata, sp.mutez(10), c)
-
-    @sp.entry_point
-    def BurnToken(self,params):
-        
-        sp.set_type(params,sp.TRecord(amount = sp.TNat , address = sp.TAddress))
-        sp.verify(self.data.Indexer[params.address].contains(sp.sender))
-        
-        c = sp.contract(sp.TRecord(address = sp.TAddress, value = sp.TNat), self.data.token, entry_point = "Hello").open_some()
-
-        mydata = sp.record(address = params.address, value = params.amount)
-
-        sp.transfer(mydata, sp.mutez(10), c)
-    
-    
-    
 @sp.add_test(name="Validator")
 def test():
 
@@ -257,28 +206,22 @@ def test():
 
     # Let's display the accounts:
     scenario.h1("Accounts")
-    # scenario.show([admin, alice, bob,robert])
+    scenario.show([admin, alice, bob,robert])
 
-    # scenario.h1("Contract")
+    scenario.h1("Contract")
 
-    # oracle = USDOracle(admin.address)
-    # scenario += oracle
+    oracle = USDOracle(admin.address)
+    scenario += oracle
 
-    c1 = Validator(
+    c1 = VaultOpener(
         sp.address("KT1Wz5SaiweAtaPHoYfG4vmDuwMAZRUsseoN"),
         sp.address("KT1VeheLFhQWThArNBt7kTVSFVBthPxvh5Fc"),
+        sp.address("tz1eWLeTiKdmedBpf2K4QyKpya9pm2mGHAPY"),
         sp.address("tz1eWLeTiKdmedBpf2K4QyKpya9pm2mGHAPY")
     )
     scenario += c1  
 
 
-    c2 = VaultOpener(
-        sp.address("KT1Wz5SaiweAtaPHoYfG4vmDuwMAZRUsseoN"),
-        sp.address("KT1VeheLFhQWThArNBt7kTVSFVBthPxvh5Fc"),
-        sp.address("tz1eWLeTiKdmedBpf2K4QyKpya9pm2mGHAPY"),
-        sp.address("KT1VWE4TsWyyk7DoDPv1MbwdRfc7rcSmaqd2")
-    )
-    scenario += c2 
-
-    scenario += c1.UpdateVaultOpener(address=c2.address).run(sender=sp.address("tz1eWLeTiKdmedBpf2K4QyKpya9pm2mGHAPY"))
-    scenario += c2.OpenVault().run(sender=bob,amount=sp.tez(2))
+    scenario += c1.OpenVault().run(sender=alice,amount=sp.tez(2))
+    scenario += c1.WithdrawAdmin().run(sender=admin)    
+   
