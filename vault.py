@@ -27,18 +27,6 @@ class USDOracle(sp.Contract):
         
         sp.transfer(data,sp.mutez(0),contract)
 
-    @sp.entry_point
-    def BurnToken(self,params):
-
-        sp.set_type(params, sp.TRecord(loan = sp.TNat))
-
-        data = sp.record(price=self.data.USDPrice,loan = params.loan)
-        
-        contract = sp.contract(sp.TRecord( price = sp.TNat, loan = sp.TNat),sp.sender,entry_point = "OracleBurn").open_some()
-        
-        sp.transfer(data,sp.mutez(0),contract)
-
-
     @sp.entry_point 
     def LiquidateToken(self,params):
 
@@ -51,21 +39,20 @@ class USDOracle(sp.Contract):
         sp.transfer(data,sp.mutez(0),contract)
 
 
-
 class Vault(sp.Contract):
 
     def __init__(self,admin,oracle):
 
         # self.init_type(sp.TRecord(token = sp.TNat, xtz = sp.TNat, validator = sp.TAddress, owner = sp.TAddress,oracle = sp.TAddress))
 
-        self.init(token = sp.nat(0), xtz = sp.nat(0), validator = admin , owner = admin,oracle = oracle)
+        self.init(token = sp.nat(0), xtz = sp.nat(0), validator = admin , owner = admin,oracle = oracle, Closed = True)
 
 
     @sp.entry_point
     def IncreaseCollateral(self,params):
         sp.set_type(params, sp.TRecord(amount = sp.TNat))
 
-        sp.verify(sp.tez(params.amount) == sp.amount)
+        sp.verify(sp.mutez(params.amount) == sp.amount)
 
         self.data.xtz += params.amount 
     
@@ -75,11 +62,14 @@ class Vault(sp.Contract):
 
         sp.verify(sp.sender == self.data.owner)
 
-        sp.verify(sp.tez(params.amount) == sp.amount)
+        sp.verify(sp.mutez(params.amount) == sp.amount)
+        
+        sp.verify(self.data.Closed)
 
         self.data.xtz += params.amount 
         self.data.token += params.loan 
 
+        self.data.Closed = False
         c = sp.contract(sp.TRecord(loan = sp.TNat), self.data.oracle, entry_point = "MintToken").open_some()
 
         mydata = sp.record(loan = params.loan)
@@ -106,33 +96,36 @@ class Vault(sp.Contract):
         sp.verify(sp.sender == self.data.oracle)
         sp.set_type(params, sp.TRecord(price = sp.TNat,loan = sp.TNat))
 
-
         sp.verify(self.data.xtz * params.price*1000 >= self.data.token*150)
 
         # Call Validation for minting token
+        c = sp.contract(sp.TRecord(amount = sp.TNat , address = sp.TAddress), self.data.validator, entry_point = "MintToken").open_some()
+
+        mydata = sp.record(amount = params.loan , address = self.data.owner)
+
+        sp.transfer(mydata, sp.mutez(0), c)
+
 
     @sp.entry_point
     def PayBackLoan(self,params):
 
         sp.set_type(params, sp.TRecord(loan = sp.TNat))
         sp.verify(sp.sender == self.data.owner)
-
-        c = sp.contract(sp.TRecord(loan = sp.TNat), self.data.oracle, entry_point = "BurnToken").open_some()
-
-        mydata = sp.record(loan = params.loan)
-
-        sp.transfer(mydata, sp.mutez(0), c)
-
-    @sp.entry_point 
-    def OracleBurn(self,params):
-
-        sp.verify(sp.sender == self.data.oracle)
-        sp.set_type(params, sp.TRecord(price = sp.TNat,loan = sp.TNat))
-        
         sp.verify(self.data.token >= params.loan)
+
+        sp.if self.data.token == params.loan: 
+             
+            sp.send(self.data.owner,sp.mutez(self.data.xtz))
+            self.data.Closed = True
+            self.data.xtz = 0 
+
         self.data.token = abs(self.data.token - params.loan)
 
-        # Call Burn Validation 
+        c = sp.contract(sp.TRecord(amount = sp.TNat , address = sp.TAddress), self.data.validator, entry_point = "BurnToken").open_some()
+
+        mydata = sp.record(amount = params.loan , address = self.data.owner)
+
+        sp.transfer(mydata, sp.mutez(0), c)
 
 
     @sp.entry_point 
@@ -155,8 +148,6 @@ class Vault(sp.Contract):
         sp.verify(sp.sender == self.data.oracle)
 
         
-
-
 @sp.add_test(name="Validator")
 def test():
 
@@ -183,8 +174,9 @@ def test():
 
 
     scenario += c1.feedData(price=200).run(sender=admin)
-    scenario += c2.OpenLoan(amount=6,loan=4).run(sender=admin,amount=sp.tez(6))
-    scenario += c2.IncreaseCollateral(amount = 6).run(sender=admin,amount=sp.tez(6))
-    scenario += c2.IncreaseLoan(loan=2).run(sender=admin)
-    scenario += c2.IncreaseLoan(loan=2).run(sender=admin)
-    scenario += c2.IncreaseLoan(loan=2).run(sender=admin)
+    scenario += c2.OpenLoan(amount=6000000,loan=4000000000).run(sender=admin,amount=sp.tez(6))
+    scenario += c2.IncreaseCollateral(amount = 6000000).run(sender=admin,amount=sp.tez(6))
+    scenario += c2.IncreaseLoan(loan=2000000000).run(sender=admin)
+    scenario += c2.IncreaseLoan(loan=2000000000).run(sender=admin)
+    scenario += c2.IncreaseLoan(loan=2000000000).run(sender=admin)
+    scenario += c2.PayBackLoan(loan=1000000000).run(sender=admin)
