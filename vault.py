@@ -147,7 +147,21 @@ class Vault(sp.Contract):
 
         sp.verify(sp.sender == self.data.oracle)
 
-        
+
+    @sp.entry_point
+    def delegate(self, baker):
+        sp.verify(sp.sender == self.data.owner)
+        sp.set_delegate(baker)
+
+
+    @sp.entry_point
+    def UpdateCollateral(self,amount):
+        sp.verify(sp.sender == self.data.owner)
+        sp.verify(sp.amount == sp.mutez(0))
+        sp.verify(sp.balance == sp.mutez(amount))
+
+        self.data.xtz = amount
+
 @sp.add_test(name="Validator")
 def test():
 
@@ -176,7 +190,10 @@ def test():
     scenario += c1.feedData(price=200).run(sender=admin)
     scenario += c2.OpenLoan(amount=6000000,loan=4000000000).run(sender=admin,amount=sp.tez(6))
     scenario += c2.IncreaseCollateral(amount = 6000000).run(sender=admin,amount=sp.tez(6))
+    scenario += c2.delegate(sp.some(sp.key_hash("tz1YB12JHVHw9GbN66wyfakGYgdTBvokmXQk"))).run(sender = admin)
     scenario += c2.IncreaseLoan(loan=2000000000).run(sender=admin)
     scenario += c2.IncreaseLoan(loan=2000000000).run(sender=admin)
     scenario += c2.IncreaseLoan(loan=2000000000).run(sender=admin)
     scenario += c2.PayBackLoan(loan=1000000000).run(sender=admin)
+    scenario += c2.UpdateCollateral(12000000).run(sender=admin)
+    
