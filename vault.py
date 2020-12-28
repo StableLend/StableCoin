@@ -39,6 +39,18 @@ class USDOracle(sp.Contract):
         sp.transfer(data,sp.mutez(0),contract)
 
 
+    @sp.entry_point
+    def CollateralWithdraw(self,params):
+
+        sp.set_type(params, sp.TRecord(amount = sp.TNat))
+
+        data = sp.record(price=self.data.USDPrice,amount = params.amount)
+        
+        contract = sp.contract(sp.TRecord( price = sp.TNat, amount = sp.TNat),sp.sender,entry_point = "OracleWithdrawCollateral").open_some()
+        
+        sp.transfer(data,sp.mutez(0),contract)
+
+
 class Vault(sp.Contract):
 
     def __init__(self,admin,oracle):
@@ -146,6 +158,32 @@ class Vault(sp.Contract):
         sp.set_type(params, sp.TRecord(address = sp.TAddress,price = sp.TNat))        
 
         sp.verify(sp.sender == self.data.oracle)
+
+    @sp.entry_point
+    def WithdrawCollateral(self,params):
+        sp.set_type(params, sp.TRecord(amount = sp.TNat))
+
+        sp.verify(sp.sender == self.data.owner)
+
+        sp.verify(self.data.xtz > params.amount)
+        self.data.xtz = abs(self.data.xtz - params.amount)
+
+        c = sp.contract(sp.TRecord(amount = sp.TNat), self.data.oracle, entry_point = "CollateralWithdraw").open_some()
+
+        mydata = sp.record(amount = params.amount)
+
+        sp.transfer(mydata, sp.mutez(0), c)
+
+    @sp.entry_point
+    def OracleWithdrawCollateral(self,params):
+
+        sp.set_type(params, sp.TRecord(amount = sp.TNat, price = sp.TNat))
+        sp.verify(sp.sender == self.data.oracle)
+
+
+        sp.verify(self.data.xtz * params.price*1000 >= self.data.token*150)
+        
+        sp.send(self.data.owner,sp.mutez(params.amount))
 
 
     @sp.entry_point
